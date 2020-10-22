@@ -2,6 +2,8 @@ from jira import JIRA
 from datetime import timedelta, datetime
 import dateutil.parser
 import pytz
+import os
+from dotenv import load_dotenv
 
 
 class Jira:
@@ -18,10 +20,14 @@ class Jira:
         # Опции для подключения к серверу Jira
         #  сервер:
         jira_options = {'server': 'https://jira.zyfra.com'}
-        #  логин:
-        jira_login = input('Введи логин пользователя Jira: ')
-        #  пароль:
-        jira_pass = input('Введи пароль: ')
+        dotenv_path = os.path.join(os.path.dirname(__file__),'.env')
+        if os.path.exists(dotenv_path):
+            load_dotenv(dotenv_path)
+            jira_login = os.getenv("JIRA_LOGIN")
+            jira_pass = os.getenv("JIRA_PASS")
+        else:
+            jira_login = input('Введи логин пользователя Jira: ')
+            jira_pass = input('Введи пароль: ')
         # Объявляем переменную - объект JIRA, выполняя обращение к серверу
         self.jira = JIRA(options=jira_options, basic_auth=(jira_login, jira_pass))
         # Количество дней от текущего момента в прошлое, за которое требуется обработать задачи
@@ -30,6 +36,7 @@ class Jira:
         self.issues_list = self.jira.search_issues(jql, maxResults=1000)
         # Время в UTC
         self.utc = pytz.UTC
+
 
     def file_begins_ends(self, flg):
 
@@ -93,7 +100,7 @@ class Jira:
 
         self.file_begins_ends('end')
 
-    def all_user_comments(self, username=''):
+    def all_users_comments(self, username=''):
         """
         Функция, возвращающая все комментарии в Jira от определенного пользователя
         :param username: Имя пользователя, как в Jira
@@ -127,3 +134,35 @@ class Jira:
                             self.write_data(issue, lastcomment)
 
         self.file_begins_ends('end')
+
+
+
+    def check_comments(self):
+        """
+        Функция для получения коследнего комментария по всем задачам, удовлетворяющим поисковому запросу из блока init
+        :return: Функция ничего не возвращает, результатом работы функции является html-файл, который можно открыть в
+        браузере.
+        """
+
+        self.file_begins_ends('begin')
+
+        # Перебираем список тикетов, полученных при инициализации
+        for i in self.issues_list:
+            issue = self.jira.issue(str(i))
+            # В явном виде проверяем задачи только проекта VISTHELP2
+            #if 'VISTHELP2' in str(issue):
+            # Если есть комментарии в задаче
+            if len(issue.fields.comment.comments) != 0:
+                # Берем последний комментарий задачи
+                lastcomment = issue.fields.comment.comments[-1]
+                # Если комментарий не старше определенного при инициализации количества дней delta
+                if dateutil.parser.isoparse(lastcomment.created) > self.utc.localize(datetime.today() - self.delta):
+                    # Вызываем функцию записи в файл
+                    self.write_data(issue, lastcomment)
+
+        self.file_begins_ends('end')
+
+
+    def update_label(self):
+        print(self.issues_list[0])
+        # pass
